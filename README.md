@@ -134,19 +134,37 @@
 
 ```mermaid
 flowchart TD
-    A["train.csv / test.csv"] --> B["Qwen3.5 LoRA fine-tuning"]
-    B --> C["Prompt branch inference"]
-    B --> D["Original prompt branch inference"]
-    C --> E["Prediction CSV with confidence and margin"]
-    D --> E
-    E --> F["Conservative baseline merge"]
-    F --> G["Low-confidence / low-margin subset selection"]
-    G --> H["Brain planner: qtype and focus objects"]
-    H --> I["Grounding DINO / SAM context extraction"]
-    I --> J["Qwen + InternVL student scoring"]
-    J --> K["qtype-aware weighted ensemble"]
-    K --> L["Final hybrid submission"]
-    F --> L
+    START["문제 입력<br/>이미지 + 질문 + 보기 4개"] --> BASE["먼저 빠르게 답하기<br/>Qwen 기반 모델 2개가 각각 예측"]
+    BASE --> COMPARE["두 예측을 비교하기<br/>답, 확신도, 1·2위 점수 차이를 확인"]
+    COMPARE --> DECIDE{"충분히 확실한가?"}
+
+    DECIDE -- "예" --> KEEP["기본 답안 유지"]
+    DECIDE -- "아니오" --> SELECT["어려운 문제만 골라내기<br/>낮은 확신도 / 작은 점수 차이 / 취약한 질문 유형"]
+
+    SELECT --> PLAN["질문 의도 파악<br/>무엇을 물어보는지, 어디를 봐야 하는지 정리"]
+    PLAN --> FOCUS["이미지에서 필요한 부분 찾기<br/>객체 위치를 잡고 crop 이미지 생성"]
+    FOCUS --> RERUN["다시 자세히 답하기<br/>Qwen + InternVL + 탐지 결과를 함께 사용"]
+    RERUN --> REPLACE["필요한 답만 교체<br/>기본 답안보다 재검토 답안이 필요한 행만 반영"]
+
+    KEEP --> FINAL["최종 제출 파일<br/>final_submission.csv"]
+    REPLACE --> FINAL
+
+    BASE -.-> BASE_FILE["구현 파일<br/>train_qwen35_choice_ft_*.py"]
+    COMPARE -.-> MERGE_FILE["구현 파일<br/>build_margin_baseline_submission.py"]
+    SELECT -.-> SELECT_FILE["구현 파일<br/>prepare_rerun_subset.py"]
+    PLAN -.-> MULTI_FILE["구현 파일<br/>colab_three_pass_multistage.py<br/>multistage_vqa.py"]
+    REPLACE -.-> FINAL_FILE["구현 파일<br/>build_final_hybrid_submission.py"]
+
+    classDef input fill:#eef6ff,stroke:#4f8bc9,color:#10233f;
+    classDef process fill:#fff7e6,stroke:#d89022,color:#3b2600;
+    classDef decision fill:#fff1f1,stroke:#d95c5c,color:#3b1111;
+    classDef output fill:#edf8ef,stroke:#4d9b61,color:#11351a;
+    classDef file fill:#f6f6f6,stroke:#a0a0a0,color:#333,stroke-dasharray: 4 3;
+    class START input;
+    class BASE,COMPARE,SELECT,PLAN,FOCUS,RERUN,REPLACE process;
+    class DECIDE decision;
+    class KEEP,FINAL output;
+    class BASE_FILE,MERGE_FILE,SELECT_FILE,MULTI_FILE,FINAL_FILE file;
 ```
 
 ## 핵심 아이디어
